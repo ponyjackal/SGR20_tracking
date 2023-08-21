@@ -1,0 +1,22 @@
+{
+  "name": "mobula_test_script",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "@ethersproject/providers": "^5.7.2",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.7.0"
+  }
+}
