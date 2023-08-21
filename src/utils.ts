@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import abi from "./abi/SRG20";
+import abi from "./abi/SGR20.json";
 
 export function decodeTransaction(
   input: string
