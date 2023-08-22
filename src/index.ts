@@ -1,12 +1,15 @@
 import { ethers } from "ethers";
 import BigNumber from "bignumber.js";
 import "dotenv/config";
-
 import { decodeEvent, decodeTransaction } from "./utils";
+import abi from "./abi/SGR20.json";
 
-const TOKEN_ADDRESS = "0x43C3EBaFdF32909aC60E80ee34aE46637E743d65"; // SRG20 token address
+const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS as string; // SRG20 token address
+const RPC_URL = process.env.RPC_URL as string;
 const START_BLOCK = 0; // Start block for historical data retrieval
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+const provider = new ethers.JsonRpcProvider(RPC_URL);
+// Create a contract instance
+const contract = new ethers.Contract(TOKEN_ADDRESS, abi, provider);
 
 async function processTransactionVolume(txHash: string) {
   const transaction = await provider.getTransaction(txHash);
@@ -60,6 +63,30 @@ async function processTransactionLiquidity(txHash: string) {
   return liquidity;
 }
 
+async function getPrice(
+  blockTag: string | null | undefined
+): Promise<BigNumber> {
+  if (!blockTag) return new BigNumber(0);
+
+  const price = (await contract.getFunction("calculatePrice").call({
+    blockTag,
+  })) as BigNumber;
+
+  return price;
+}
+
+async function getLiquidity(
+  blockTag: string | null | undefined
+): Promise<BigNumber> {
+  if (!blockTag) return new BigNumber(0);
+
+  const liquidity = (await contract.getFunction("liquidity").call({
+    blockTag,
+  })) as BigNumber;
+
+  return liquidity;
+}
+
 async function getHistoricalData(startBlock: number, endBlock: number) {
   const latestBlockNumber = await provider.getBlockNumber();
   const historicalData: any[] = [];
@@ -74,14 +101,21 @@ async function getHistoricalData(startBlock: number, endBlock: number) {
   const transactionVolumePromises = blocks.flatMap((block) => {
     return block?.transactions.map((tx) => processTransactionVolume(tx));
   });
+  // const transactionLiquidityPromises = blocks.flatMap((block) => {
+  //   return block?.transactions.map((tx) => processTransactionLiquidity(tx));
+  // });
   const transactionLiquidityPromises = blocks.flatMap((block) => {
-    return block?.transactions.map((tx) => processTransactionLiquidity(tx));
+    return getLiquidity(block?.hash);
+  });
+  const transactionPricePromises = blocks.flatMap((block) => {
+    return getPrice(block?.hash);
   });
 
   const transactionVolumes = await Promise.all(transactionVolumePromises);
   const transactionLiquidities = await Promise.all(
     transactionLiquidityPromises
   );
+  const transactionPrices = await Promise.all(transactionPricePromises);
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -89,34 +123,38 @@ async function getHistoricalData(startBlock: number, endBlock: number) {
 
     const volume = transactionVolumes
       .slice(i * block.transactions.length, (i + 1) * block.transactions.length)
-      .reduce((acc, vol) => {
+      .reduce((acc, val) => {
         if (!acc) {
           acc = new BigNumber(0);
         }
-        if (!vol) {
-          vol = new BigNumber(0);
+        if (!val) {
+          val = new BigNumber(0);
         }
 
-        return acc.plus(vol);
+        return acc.plus(val);
       }, new BigNumber(0));
 
-    const liquidity = transactionLiquidities
-      .slice(i * block.transactions.length, (i + 1) * block.transactions.length)
-      .reduce((acc, vol) => {
-        if (!acc) {
-          acc = new BigNumber(0);
-        }
-        if (!vol) {
-          vol = new BigNumber(0);
-        }
+    // const liquidity = transactionLiquidities
+    //   .slice(i * block.transactions.length, (i + 1) * block.transactions.length)
+    //   .reduce((acc, val) => {
+    //     if (!acc) {
+    //       acc = new BigNumber(0);
+    //     }
+    //     if (!val) {
+    //       val = new BigNumber(0);
+    //     }
 
-        return acc.plus(vol);
-      }, new BigNumber(0));
+    //     return acc.plus(val);
+    //   }, new BigNumber(0));
+    const liquidity = transactionLiquidities[i];
+
+    const price = transactionPrices[i];
 
     historicalData.push({
       timestamp: block.timestamp,
       volume: volume?.toString(),
       liquidity: liquidity?.toString(),
+      price: price?.toString(),
     });
   }
 
@@ -125,7 +163,7 @@ async function getHistoricalData(startBlock: number, endBlock: number) {
 
 (async () => {
   try {
-    const historicalData = await getHistoricalData(26097260, 26097386);
+    const historicalData = await getHistoricalData(26097386, 26097387);
     console.log(historicalData);
   } catch (error) {
     console.error("Error:", error);
